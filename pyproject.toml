@@ -63,6 +63,12 @@ dependencies = [
   "chardet>=7.4.3",
   "protobuf>=5.29.1,<8.0",
   "grpcio>=1.81.1",
+  # Stays below 13.0.0 (the release fixing #2067) on purpose: every fastembed
+  # release caps pillow<13.0, so a 13.0.0 floor makes semantica[all]
+  # unresolvable and backtracks [embeddings-local] to fastembed 0.2.7. A
+  # plain install still resolves 13.0.0; the repo's lockfiles force it via
+  # [tool.uv] override-dependencies. Raise to >=13.0.0 once fastembed lifts
+  # its cap (qdrant/fastembed#830).
   "pillow>=12.2.0",
   "pydantic>=2.13.4",
   "click>=8.4.2",
