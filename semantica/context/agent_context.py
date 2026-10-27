@@ -1764,6 +1764,18 @@ class AgentContext:
                 decision, self.evaluators, self.eval_config, self.logger
             )
         metadata = dict(decision.metadata or {})
+        # ContextGraph rejects metadata values whose str() exceeds 1000
+        # characters. An evaluator's diagnostic detail can cross that limit
+        # (for example a long outcome echoed into a mismatch reason), and the
+        # evaluator hook is explicitly non-blocking, so keep the compact score
+        # and pass/fail fields and omit the oversized diagnostic payload.
+        if "eval_details" in metadata and len(str(metadata["eval_details"])) > 1000:
+            self.logger.warning(
+                f"Decision evaluation details for {decision.decision_id} exceed "
+                "ContextGraph's metadata value limit; storing eval_score and "
+                "eval_passed without eval_details"
+            )
+            metadata.pop("eval_details", None)
         if cross_system_context:
             metadata["cross_system_context"] = cross_system_context
         decision_id = self.knowledge_graph.record_decision(
@@ -1776,6 +1788,7 @@ class AgentContext:
             decision_maker=decision_maker,
             valid_from=valid_from,
             valid_until=valid_until,
+            decision_id=decision.decision_id,
             metadata=metadata or None,
         )
 

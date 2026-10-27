@@ -374,3 +374,65 @@ class TestAgentContextContextGraphEvalHook:
         assert any(
             "Decision evaluation failed" in record.message for record in caplog.records
         )
+
+    def test_evaluator_sees_the_persisted_decision_id(self, vector_store, monkeypatch):
+        seen = {}
+
+        def fake_evaluate(cases, evaluators, config):
+            seen["decision_id"] = cases[0]["actual"].decision_id
+            return EvalSummary(
+                total=1,
+                passed=1,
+                failed=0,
+                errors=0,
+                pass_rate=1.0,
+                cases=[
+                    CaseResult(
+                        case_id=seen["decision_id"],
+                        status="pass",
+                        metrics={"decision_scores": EvalMetric(1.0, True, {})},
+                        details={},
+                    )
+                ],
+            )
+
+        monkeypatch.setattr("semantica.evals.evaluate", fake_evaluate)
+
+        graph, decision_id = self._record(vector_store, evaluators=["decision_scores"])
+
+        assert seen["decision_id"] == decision_id
+        assert decision_id in graph.nodes
+
+    def test_long_eval_details_are_omitted_without_blocking_recording(
+        self, vector_store, caplog
+    ):
+        # ContextGraph caps metadata values at 1,000 characters; the evaluator
+        # echoes a valid but long outcome into its mismatch reason.
+        long_outcome = "approved" + "x" * 990
+
+        graph = ContextGraph()
+        context = AgentContext(
+            vector_store=vector_store,
+            knowledge_graph=graph,
+            decision_tracking=True,
+            evaluators=["decision_scores"],
+            eval_config={"decision_scores": {"expected_outcome": "approved"}},
+        )
+        with caplog.at_level(logging.WARNING):
+            decision_id = context.record_decision(
+                category="loan",
+                scenario="mortgage application",
+                reasoning="strong credit history",
+                outcome=long_outcome,
+                confidence=0.95,
+                decision_maker="loan_officer",
+            )
+
+        assert decision_id in graph.nodes
+        props = graph.nodes[decision_id].properties
+        assert props["eval_score"] < 1.0
+        assert props["eval_passed"] is False
+        assert "eval_details" not in props
+        assert any(
+            "metadata value limit" in record.message for record in caplog.records
+        )
