@@ -81,7 +81,7 @@ from .agent_memory import AgentMemory
 from .context_retriever import ContextRetriever, RetrievedContext
 from .entity_linker import EntityLinker
 from .decision_models import Decision
-from .decision_recorder import DecisionRecorder
+from .decision_recorder import DecisionRecorder, evaluate_and_enrich_decision
 from .decision_query import DecisionQuery
 from .causal_analyzer import CausalChainAnalyzer
 from .policy_engine import PolicyEngine
@@ -1756,7 +1756,16 @@ class AgentContext:
         if not hasattr(self.knowledge_graph, "record_decision"):
             raise RuntimeError("Decision tracking backend does not support decisions")
 
-        # Delegate to ContextGraph
+        # Delegate to ContextGraph. Run the same opt-in evaluator hook as the
+        # DecisionRecorder path before persisting, so eval_* metadata is
+        # available on both decision backends.
+        if self.evaluators:
+            evaluate_and_enrich_decision(
+                decision, self.evaluators, self.eval_config, self.logger
+            )
+        metadata = dict(decision.metadata or {})
+        if cross_system_context:
+            metadata["cross_system_context"] = cross_system_context
         decision_id = self.knowledge_graph.record_decision(
             category=category,
             scenario=scenario,
@@ -1767,9 +1776,9 @@ class AgentContext:
             decision_maker=decision_maker,
             valid_from=valid_from,
             valid_until=valid_until,
-            metadata={"cross_system_context": cross_system_context} if cross_system_context else None
+            metadata=metadata or None,
         )
-        
+
         return decision_id
 
     def find_precedents(
