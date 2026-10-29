@@ -4044,6 +4044,12 @@ class ContextGraph:
             raise ValueError("Direction must be 'upstream', 'downstream' or 'both'")
 
         now = datetime.utcnow()
+        if (
+            not include_inactive
+            and decision_id in self.nodes
+            and not self.nodes[decision_id].is_active(now)
+        ):
+            return []
 
         # Build the causal adjacency once.  The traversal below used to loop
         # over ``self.edges`` for every decision it dequeued, which is O(V*E)

@@ -93,3 +93,26 @@ def test_both_direction_forwards_include_inactive():
     both = graph.get_causal_chain(effect, "both", include_inactive=True)
     assert _ids(both) == [cause]
     assert both[0].metadata["causal_direction"] == "upstream"
+
+
+def test_inactive_start_decision_returns_no_current_chain():
+    graph, cause, effect, _ = _linked_decisions()
+    # Keep the causal edge active; only the requested decision is inactive.
+    assert graph.retract_node(
+        effect, reason="superseded", at="2024-01-01T00:00:00", cascade=False
+    )
+
+    assert _ids(graph.get_causal_chain(effect, "upstream")) == []
+    assert _ids(graph.get_causal_chain(effect, "upstream", include_inactive=True)) == [
+        cause
+    ]
+
+
+def test_future_start_decision_returns_no_current_chain():
+    graph, cause, effect, _ = _linked_decisions()
+    graph.nodes[effect].valid_from = "2999-01-01T00:00:00"
+
+    assert _ids(graph.get_causal_chain(effect, "upstream")) == []
+    assert _ids(graph.get_causal_chain(effect, "upstream", include_inactive=True)) == [
+        cause
+    ]
